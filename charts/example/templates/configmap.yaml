@@ -1,0 +1,26 @@
+{{/*
+ConfigMap
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}"
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    {{- include "example.labels" . | nindent 4 }}
+data:
+  example: |+
+    .Chart.Name: {{ .Chart.Name  }}
+    .Chart.Version: {{ .Chart.Version  }}
+    .Chart.AppVersion: {{ .Chart.AppVersion }}
+    .Release.Service: {{ .Release.Service }}
+    .Release.IsUpgrade: {{ .Release.IsUpgrade }}
+    .Release.IsInstall: {{ .Release.IsInstall }}
+    {{ "{{" }} Escaped braces {{ "}}" }}
+    name {{ include "example.name" . }}
+    fullname {{ include "example.fullname" . }}
+
+    items:
+    {{- range .Values.items }}
+      - item: {{ . }}
+    {{- end }}
