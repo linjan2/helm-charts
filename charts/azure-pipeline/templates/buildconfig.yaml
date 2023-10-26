@@ -1,0 +1,75 @@
+{{ $VARIABLES := dict }}
+{{ range $var := .Values.variables }}
+{{ $VARIABLES = merge $VARIABLES (dict $var.name $var.value) }}
+{{ end }}
+
+---
+
+apiVersion: v1
+kind: ImageStream
+metadata:
+  name: {{ $VARIABLES.NAME }}
+  namespace: {{ $VARIABLES.NAMESPACE }}
+spec:
+  lookupPolicy:
+    local: true # enable Kubernetes resources in the same namespace to reference imagestreamtags by name
+
+---
+
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ $VARIABLES.NAME }}
+  namespace: {{ $VARIABLES.NAMESPACE }}
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ $VARIABLES.NAME }}:latest # alway push to latest, then deploy from is dockerImageReference
+  source:
+    binary: {}
+    type: Binary
+  strategy:
+    type: Docker # expects Dockerfile in uploaded directory
+    dockerStrategy:
+      dockerfilePath: {{ default "."  $VARIABLES.DOCKERFILEPATH }}
+      forcePull: false
+  runPolicy: SerialLatestOnly
+  successfulBuildsHistoryLimit: 1
+  failedBuildsHistoryLimit: 1
+  completionDeadlineSeconds: 1800 # 30m
+  resources:
+    {{- toYaml $VARIABLES.RESOURCES | nindent 4 }}
+    # limits:
+    #   cpu: '1'
+    #   memory: 4Gi
+    # requests:
+    #   cpu: 500m
+    #   memory: 500Mi
+  # nodeSelector:
+  #   key1: value1
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $VARIABLES.NAME }}
+  namespace: {{ $VARIABLES.NAMESPACE }}
+
+---
+
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: {{ $VARIABLES.NAME }}
+  namespace: {{ $VARIABLES.NAMESPACE }}
+  annotations:
+    kubernetes.io/service-account.name: {{ $VARIABLES.NAME }}
+    description: |-
+      To get the authentication token for serviceaccount/{{ $VARIABLES.NAME }}:
+        oc extract secret/{{ $VARIABLES.NAME }} --keys=token --to=-
+
+---
+

@@ -1,0 +1,25 @@
+{{ $VARIABLES := dict }}
+{{ range $var := .Values.variables }}
+{{ $VARIABLES = merge $VARIABLES (dict $var.name $var.value) }}
+{{ end }}
+
+
+{{/*
+ConfigMap
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ $VARIABLES.NAME }}"
+  namespace: "{{ $VARIABLES.NAMESPACE }}"
+data:
+  example: |+
+    .Chart.Name: {{ .Chart.Name  }}
+    .Chart.Version: {{ .Chart.Version  }}
+    .Chart.AppVersion: {{ .Chart.AppVersion }}
+    .Release.Name: {{ .Release.Name }}
+    .Release.Namespace: {{ .Release.Namespace }}
+    .Release.Service: {{ .Release.Service }}
+    .Release.IsUpgrade: {{ .Release.IsUpgrade }}
+    .Release.IsInstall: {{ .Release.IsInstall }}
+    {{ "{{" }} Escaped braces {{ "}}" }}

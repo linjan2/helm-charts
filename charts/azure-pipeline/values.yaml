@@ -1,0 +1,124 @@
+name: $(Build.BuildNumber)-$(Build.BuildId)
+
+# trigger:
+#   - main
+# trigger:
+#   branches:
+#     include:
+#     - main
+#     - master
+#   paths:
+#     exclude:
+#     - '*pipeline.yaml'
+trigger: none
+
+parameters:
+  - name: VERSION
+    displayName: Set version metadata
+    type: string
+    default: $(Build.BuildNumber)-$(Build.BuildId)
+
+pool:
+  #vmImage: ubuntu-latest
+  name: Default
+  # demands:
+  #   - Agent.Version -gtVersion 2.199
+  #   - CustomCapability
+
+
+variables:
+- group: devops-secrets
+- name: NAME
+  value: example
+- name: NAMESPACE
+  value: example
+- name: VERSION
+  value: ${{ parameters.VERSION }}
+- name: RESOURCES
+  value:
+    limits:
+      cpu: '1'
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 500Mi
+
+stages:
+- stage: build
+  displayName: Build
+  jobs:
+  - job: build
+    pool:
+      name: Default
+      #demands: Agent.OS -equals linux
+    timeoutInMinutes: 60
+    displayName: Build from source
+
+    steps:
+
+    - checkout: git://test0/_git/test0@main
+      #checkout: self
+      clean: true
+      persistCredentials: true # leave OAuth token in git config
+
+    - script: |
+        set -o errexit
+        echo Build from source
+        ls -l
+        echo 123 > $(Build.ArtifactStagingDirectory)/release
+      displayName: Prepare source
+
+    - script: |
+        set -o errexit
+        oc start-build bc/$(NAME) --from-dir=. --follow
+        BUILDVERSION="$(oc get 'bc/$(NAME)' -o jsonpath=${.status.lastVersion})"
+        IMAGE="$(oc get build/$(NAME)-${BUILDVERSION} -o jsonpath='{.status.output.to.imageDigest}')"
+
+        echo "##vso[task.setvariable variable=IMAGE;isOutput=true]${IMAGE}"
+      name: build
+      displayName: Start build
+
+    # - publish: '$(Build.ArtifactStagingDirectory)'
+    #   # publish: $(Build.SourcesDirectory)/build
+    #   artifact: drop
+
+    # - task: DownloadPipelineArtifact@2
+    #   inputs:
+    #     source: current
+    #     targetPath: '$(Pipeline.Workspace)/download'
+
+  - job: job2
+    dependsOn: build
+    variables:
+      IMAGE: $[ dependencies.build.outputs['build.IMAGE'] ]
+    steps:
+    - script: |
+        echo 'IMAGE=$(IMAGE)'
+    - script:
+        git config --global user.email '$(Agent.Name)@pipeline.lo'
+        git config --global user.name '$(Agent.Name)'
+        git tag '$(VERSION)-$(IMAGE)'
+        git push origin '$(VERSION)-$(IMAGE)'
+      displayName: Tag with version and image
+
+- stage: next-on-succeeded
+  dependsOn: build
+  condition: succeeded()
+  variables:
+    IMAGE: $[ stageDependencies.build.build.outputs['build.IMAGE'] ]
+  jobs:
+  - job: job3
+    steps:
+    - script: echo '$(IMAGE)'
+      displayName: execute on success
+
+
+- stage: next-on-failed
+  dependsOn: build
+  condition: failed()
+  jobs:
+  - job: job4
+    steps:
+    - script: echo task to be executed on failure
+      displayName: execute on failure
+
